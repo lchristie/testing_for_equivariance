@@ -1,5 +1,6 @@
 library(rdist)
 library(MASS)
+library(energy)
 
 #### Helper Functions
 
@@ -66,7 +67,7 @@ AsymVarTest <- function( m_X, m_Y, d_X, norm_Y, m_V, m_mu_g, m_p_t, m_thresh, m_
   dif_mat <- matrix(0, nrow = m_m, ncol = n)
   
   for (i in 1:m_m) {
-    g_i <- sample( m_mu_g ,1)
+    g_i <- m_mu_g[ sample( length(m_mu_g), 1 ) ]
     ind <- sample(1:n, 1)
     X_i <- m_X[ind,]
     Y_i <- m_Y[ind,]
@@ -93,7 +94,7 @@ PermVarTest <- function( m_X, m_Y, d_X, norm_Y, m_V_Cal, m_q, m_mu_g, m_m, m_B, 
     dist_mat <- matrix(0, nrow = m_m , ncol = n)
     dif_mat <- matrix(0, nrow = m_m, ncol = n)
     for (k in 1:m_m) {
-      g_i <- sample(m_mu_g, 1)
+      g_i <- m_mu_g[ sample( length(m_mu_g) , 1 ) ]
       ind <- sample(1:n, 1)
       X_i <- m_X[ind,]
       Y_i <- m_Y[ind,]
@@ -122,6 +123,34 @@ PermVarTest <- function( m_X, m_Y, d_X, norm_Y, m_V_Cal, m_q, m_mu_g, m_m, m_B, 
   
   p_val <- mean( I(ratios <= orig_ratio) )
   return(p_val)
+}
+
+EnergyDistanceTest <- function (m_X, m_Y, d_X, norm_Y, m_mu_g, m_g_dot, m_g_star) {
+  n <- dim(m_X)[1] 
+  GX <- m_X
+  GY <- m_Y
+  for (i in 1:n) {
+    g_i <- m_mu_g[sample(length(m_mu_g), 1)]
+    X_i <- m_X[i,]
+    Y_i <- m_Y[i,]
+    GX[i,] <- m_g_dot( g_i, X_i )
+    GY[i,] <- m_g_star( g_i, Y_i )
+  }
+  
+  dists_X <- pdist( m_X )
+  dists_GX <- pdist( GX )
+  
+  dists_Y <- pdist( m_Y )
+  dists_GY <- pdist( GY )
+  
+  d_mat <- cbind( as.vector(dists_X), as.vector(dists_Y) )
+  Gd_mat <- cbind( as.vector(dists_GX), as.vector(dists_GY) )
+  
+  X <- rbind(d_mat, Gd_mat)
+  
+  a_test_results <- eqdist.etest( X, c(n^2, n^2), R = 199)
+  
+  return(a_test_results$p.value)
 }
 
 #### Simulations
@@ -190,7 +219,7 @@ G <- c( pi/2, pi, 3*pi/2 )
 a_q <- 0.95
 a_B <- 100
 
-rejections_fd <- matrix(0, ncol = length(ns), nrow = 4)
+rejections_fd <- matrix(0, ncol = length(ns), nrow = 6)
 pb <- txtProgressBar(min = 0, max = sum(ns) * num_sims, style = 3, width = 50, char = "=") 
 counter <- 0
 
@@ -201,6 +230,8 @@ for (k in 1:length(ns)) {
   p_vals_fd_H1 <- rep(0, num_sims)  
   p_vals_fd_H0_P <- rep(0, num_sims)
   p_vals_fd_H1_P <- rep(0, num_sims)
+  p_vals_fd_H0_E <- rep(0, num_sims)
+  p_vals_fd_H1_E <- rep(0, num_sims)
   
   for (i in 1:num_sims) {
     X <- mvrnorm(n, mu_X, Sigma_X)
@@ -209,6 +240,9 @@ for (k in 1:length(ns)) {
     p_vals_fd_H1[i] <- AsymVarTest(X, Y, d_X, norm_Y, a_V_e, G, a_p_t, 2*sigma, m, g_dot, g_bullet)
     p_vals_fd_H0_P[i] <- PermVarTest(X, Y, d_X, norm_Y, a_V_cal, a_q, G, m, a_B, g_star, g_bullet)
     p_vals_fd_H1_P[i] <- PermVarTest(X, Y, d_X, norm_Y, a_V_cal, a_q, G, m, a_B, g_dot, g_bullet)
+    p_vals_fd_H0_E[i] <- EnergyDistanceTest(X, Y, d_X, norm_Y, G, g_star, g_bullet)
+    p_vals_fd_H1_E[i] <- EnergyDistanceTest(X, Y, d_X, norm_Y, G, g_dot, g_bullet)
+      
     counter <- counter + n
     setTxtProgressBar(pb, counter)
   }
@@ -217,9 +251,12 @@ for (k in 1:length(ns)) {
   rejections_fd[2,k] <- sum(I(p_vals_fd_H1 < alpha)) / num_sims
   rejections_fd[3,k] <- sum(I(p_vals_fd_H0_P < alpha)) / num_sims
   rejections_fd[4,k] <- sum(I(p_vals_fd_H1_P < alpha)) / num_sims
+  rejections_fd[5,k] <- sum(I(p_vals_fd_H0_E < alpha)) / num_sims
+  rejections_fd[6,k] <- sum(I(p_vals_fd_H1_E < alpha)) / num_sims
+  
   
   print(paste("--Rejections for n=", n, "--"))
-  print(paste( rejections_fd[1,k], rejections_fd[2,k], rejections_fd[3,k], rejections_fd[4,k]) )
+  print(paste( rejections_fd[1,k], rejections_fd[2,k], rejections_fd[3,k], rejections_fd[4,k], rejections_fd[5,k], rejections_fd[6,k]) )
 }
 
 
@@ -230,10 +267,13 @@ plot(ns, rejections_fd[4,], type = "p", pch = 17, ylab  = "", xlab = "n", ylim =
 points(ns, rejections_fd[3,], pch = 6)
 points(ns, rejections_fd[2,], pch = 15)
 points(ns, rejections_fd[1,], pch = 22)
+points(ns, rejections_fd[5,], pch = 1)
+points(ns, rejections_fd[6,], pch = 19)
 
 lines(ns, rep(0.05, 14), lty = 3)
 lines(ns, rejections_fd[4,], lty = 2)
 lines(ns, rejections_fd[2,], lty = 4)
+points(ns, rejections_fd[6,], lty = 6)
 
 
 

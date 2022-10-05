@@ -17,7 +17,7 @@ train_y<-to_categorical(train_y,10)
 test_y<-to_categorical(test_y,10)
 
 
-#### Helper Functions
+#### Helper Functions 
 
 find_second_smallest <- function (m_arr) {
   smallest_ind <- 0
@@ -93,7 +93,7 @@ est_L <- function (digit_ind, sample_num = 0) {
   return(0)
 }
 
-## These functions take approximately 7 minutes to rune each. 
+## These functions take approximately 7 minutes to run each. 
 
 # system.time( zeros_L <-  est_L( 1, 5000 ) )
 # print(zeros_L)
@@ -204,7 +204,7 @@ run_test <- function( X, Y, G, g_inds, t, p_t, V, m ) {
   for (k in 1:m) {
     i <- sample(1:n, 1)
     X_i <- X[i,] 
-    g_ind <- sample(g_inds, 1)
+    g_ind <- g_inds[sample.int(length(g_inds), size = 1)]
     X_prime <- as.matrix(G[[g_ind]](cbind(1, X_i))[,-1])
     dim(X_prime) <- c(1,784)
     dist_mat[k,] <- cdist(X_prime, X, metric = "euclidean", p = 2)
